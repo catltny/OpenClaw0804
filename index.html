@@ -1,18 +1,257 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="zh-HK">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>你好，世界</title>
-  <link rel="stylesheet" href="style.css" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>To-Do List</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: #f0f2f5;
+      color: #1a1a2e;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      padding: 24px 12px 60px;
+    }
+
+    .app {
+      width: 100%;
+      max-width: 640px;
+    }
+
+    h1 {
+      font-size: 2rem;
+      text-align: center;
+      margin-bottom: 20px;
+      color: #1a1a2e;
+    }
+
+    /* ── Stats bar ── */
+    .stats {
+      background: #fff;
+      border-radius: 12px;
+      padding: 14px 20px;
+      margin-bottom: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 1rem;
+      color: #555;
+      box-shadow: 0 1px 4px rgba(0,0,0,.08);
+    }
+    .stats strong { color: #1a1a2e; font-size: 1.15rem; }
+
+    /* ── Input row ── */
+    .input-row {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .input-row input {
+      flex: 1;
+      font-size: 1rem;
+      padding: 12px 16px;
+      border: 2px solid #dde1e7;
+      border-radius: 12px;
+      outline: none;
+      transition: border-color .2s;
+      background: #fff;
+    }
+    .input-row input:focus { border-color: #4f6ef7; }
+    .input-row button {
+      font-size: 1rem;
+      padding: 12px 22px;
+      border: none;
+      border-radius: 12px;
+      background: #4f6ef7;
+      color: #fff;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background .2s;
+    }
+    .input-row button:hover { background: #3b5de7; }
+
+    /* ── List ── */
+    .todo-list { list-style: none; }
+    .todo-item {
+      background: #fff;
+      border-radius: 12px;
+      padding: 14px 16px;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.07);
+      transition: opacity .25s, transform .25s;
+    }
+    .todo-item.removing {
+      opacity: 0;
+      transform: translateX(40px);
+    }
+
+    /* Checkbox */
+    .todo-item input[type=checkbox] {
+      width: 22px;
+      height: 22px;
+      cursor: pointer;
+      accent-color: #4f6ef7;
+      flex-shrink: 0;
+    }
+
+    /* Text */
+    .todo-text {
+      flex: 1;
+      font-size: 1.05rem;
+      line-height: 1.4;
+      word-break: break-word;
+      transition: color .2s;
+    }
+    .todo-item.done .todo-text {
+      text-decoration: line-through;
+      color: #aaa;
+    }
+
+    /* Delete button */
+    .del-btn {
+      background: none;
+      border: none;
+      color: #ccc;
+      font-size: 1.4rem;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 8px;
+      line-height: 1;
+      transition: color .2s, background .2s;
+      flex-shrink: 0;
+    }
+    .del-btn:hover { color: #e74c3c; background: #fce8e6; }
+
+    /* ── Clear done ── */
+    .clear-done {
+      display: block;
+      margin: 20px auto 0;
+      font-size: .95rem;
+      padding: 10px 24px;
+      border: 2px solid #e74c3c;
+      border-radius: 10px;
+      background: #fff;
+      color: #e74c3c;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .2s, color .2s;
+    }
+    .clear-done:hover { background: #e74c3c; color: #fff; }
+    .clear-done:disabled {
+      border-color: #ccc;
+      color: #ccc;
+      cursor: not-allowed;
+      background: #fff;
+    }
+
+    /* Empty state */
+    .empty {
+      text-align: center;
+      color: #aaa;
+      font-size: 1rem;
+      padding: 32px 0;
+    }
+  </style>
 </head>
 <body>
-  <div class="container">
-    <h1 id="title">你好，世界</h1>
-    <p id="greeting">這是一個純靜態網頁，由 HTML／CSS／JavaScript 構成。</p>
-    <button id="btn">點擊我</button>
-    <p id="output"></p>
+<div class="app">
+  <h1>📝 To-Do List</h1>
+
+  <div class="stats">
+    <span>未完成 <strong id="remain">0</strong> ／ 總數 <strong id="total">0</strong></span>
   </div>
-  <script src="script.js"></script>
+
+  <div class="input-row">
+    <input type="text" id="inp" placeholder="新增待辦事項…" autocomplete="off">
+    <button id="addBtn">新增</button>
+  </div>
+
+  <ul class="todo-list" id="list"></ul>
+
+  <button class="clear-done" id="clearDone" disabled>清除已完成</button>
+</div>
+
+<script>
+(function () {
+  const STORAGE_KEY = 'todo_list_v1';
+  let todos = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+
+  const inp       = document.getElementById('inp');
+  const addBtn    = document.getElementById('addBtn');
+  const list      = document.getElementById('list');
+  const remainEl  = document.getElementById('remain');
+  const totalEl   = document.getElementById('total');
+  const clearBtn  = document.getElementById('clearDone');
+
+  function save() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(todos));
+  }
+
+  function render() {
+    const doneCount = todos.filter(t => t.done).length;
+    remainEl.textContent = todos.length - doneCount;
+    totalEl.textContent  = todos.length;
+    clearBtn.disabled    = doneCount === 0;
+
+    list.innerHTML = '';
+    if (todos.length === 0) {
+      list.innerHTML = '<li class="empty">尚無待辦事項，新增一個吧！</li>';
+      return;
+    }
+    todos.forEach((todo, i) => {
+      const li = document.createElement('li');
+      li.className = 'todo-item' + (todo.done ? ' done' : '');
+
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = todo.done;
+      cb.addEventListener('change', () => { todos[i].done = cb.checked; save(); render(); });
+
+      const span = document.createElement('span');
+      span.className = 'todo-text';
+      span.textContent = todo.text;
+
+      const del = document.createElement('button');
+      del.className = 'del-btn';
+      del.innerHTML = '✕';
+      del.title = '刪除';
+      del.addEventListener('click', () => {
+        li.classList.add('removing');
+        setTimeout(() => { todos.splice(i, 1); save(); render(); }, 250);
+      });
+
+      li.append(cb, span, del);
+      list.appendChild(li);
+    });
+  }
+
+  function addTodo() {
+    const text = inp.value.trim();
+    if (!text) return;
+    todos.push({ text, done: false });
+    inp.value = '';
+    save();
+    render();
+  }
+
+  addBtn.addEventListener('click', addTodo);
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') addTodo(); });
+  clearBtn.addEventListener('click', () => {
+    todos = todos.filter(t => !t.done);
+    save();
+    render();
+  });
+
+  render();
+})();
+</script>
 </body>
 </html>
